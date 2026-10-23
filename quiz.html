@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Quiz di Ripartenza</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: schermo da proiettare. Domanda in grande, quattro risposte in griglia 2×2,
+   fascia in basso con timer e squadre. Stessa identità visiva della Nave virtuale. */
+:root {
+  --carta: #edf2f2; --superficie: #fbfcfc; --incavo: #e3eaeb; --inchiostro: #10293a; --tenue: #566b77; --linea: #c6d3d7;
+  --segnale: #c8460d; --segnale-fondo: #fbe6dc; --ok: #1d7a4c; --ok-fondo: #dcefe4; --critico: #b5302a;
+  --barra-fondo: #10293a; --barra-testo: #edf2f2;
+  --f-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --f-testo: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  --r: 8px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --carta: #0b1620; --superficie: #102030; --incavo: #0a1824; --inchiostro: #dbe6ea; --tenue: #8ea3ae; --linea: #24394a;
+  --segnale: #ff7a3d; --segnale-fondo: #3a2216; --ok: #5cc98f; --ok-fondo: #12301f; --critico: #ff6b60;
+  --barra-fondo: #050d14; --barra-testo: #dbe6ea; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --carta: #0b1620; --superficie: #102030; --incavo: #0a1824; --inchiostro: #dbe6ea; --tenue: #8ea3ae; --linea: #24394a;
+  --segnale: #ff7a3d; --segnale-fondo: #3a2216; --ok: #5cc98f; --ok-fondo: #12301f; --critico: #ff6b60;
+  --barra-fondo: #050d14; --barra-testo: #dbe6ea; color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: var(--carta); color: var(--inchiostro); font-family: var(--f-testo); font-size: clamp(15px, 1.25vw, 22px); line-height: 1.45; display: flex; flex-direction: column; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--barra-fondo); }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid var(--segnale); outline-offset: 2px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; margin: 0; text-wrap: balance; }
+.gutter { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.testa { background: var(--barra-fondo); color: var(--barra-testo); padding-block: 12px; display: flex; align-items: baseline; gap: 16px 32px; flex-wrap: wrap; }
+.testa h1 { font-size: 1.5em; letter-spacing: .08em; text-transform: uppercase; font-weight: 700; }
+.testa .info { font-family: var(--f-mono); font-size: .8em; opacity: .75; margin-left: auto; }
+.scena { flex: 1; display: flex; flex-direction: column; gap: 1.2em; padding-block: 2.2vh 2vh; max-width: 1600px; width: 100%; margin: 0 auto; min-height: 0; }
+.occhiello { font-family: var(--f-display); font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--segnale); font-size: .9em; }
+.domanda { font-family: var(--f-display); font-weight: 600; font-size: clamp(28px, 3.6vw, 64px); line-height: 1.08; max-width: 30ch; }
+.opzioni { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.4vh 1.4vw; }
+@media (max-width: 700px) { .opzioni { grid-template-columns: minmax(0, 1fr); } }
+.opz { display: grid; grid-template-columns: 2.2em minmax(0, 1fr); gap: .6em; align-items: center; background: var(--superficie); border: 2px solid var(--linea); border-radius: var(--r); padding: 1.6vh 1.2vw; font-size: clamp(16px, 1.7vw, 30px); min-height: 11vh; }
+.opz .lett { font-family: var(--f-display); font-weight: 700; font-size: 1.5em; color: var(--tenue); text-align: center; border-right: 2px solid var(--linea); }
+.opz.giusta { border-color: var(--ok); background: var(--ok-fondo); }
+.opz.giusta .lett { color: var(--ok); }
+.opz.sbagliata { opacity: .45; }
+.spiega { background: var(--superficie); border-left: 6px solid var(--ok); border-radius: var(--r); padding: 1.2vh 1.2vw; font-size: clamp(15px, 1.35vw, 24px); max-width: 75ch; }
+.fascia { display: flex; flex-wrap: wrap; gap: 1em 2em; align-items: center; justify-content: space-between; margin-top: auto; }
+.timer { display: flex; align-items: center; gap: .8em; flex: 1 1 280px; }
+.timer .num { font-family: var(--f-display); font-size: 2.4em; font-weight: 700; width: 2.2ch; text-align: right; font-variant-numeric: tabular-nums; }
+.timer .barra { flex: 1; height: 12px; background: var(--incavo); border-radius: 6px; overflow: hidden; }
+.timer .riemp { height: 100%; background: var(--segnale); width: 100%; }
+.comandi { display: flex; gap: .6em; flex-wrap: wrap; }
+.btn { background: var(--inchiostro); color: var(--carta); border: none; border-radius: var(--r); padding: .55em 1.2em; font-family: var(--f-display); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; font-size: 1.05em; cursor: pointer; }
+.btn.primario { background: var(--segnale); color: #fff; }
+.btn.sec { background: var(--superficie); color: var(--inchiostro); border: 2px solid var(--linea); }
+.squadre { display: flex; flex-wrap: wrap; gap: .5em; }
+.sq { display: flex; align-items: center; gap: .5em; background: var(--superficie); border: 2px solid var(--linea); border-radius: 999px; padding: .25em .9em .25em .6em; cursor: pointer; font-weight: 700; }
+.sq .p { font-family: var(--f-mono); font-size: .85em; color: var(--tenue); }
+.sq[aria-pressed="true"] { border-color: var(--ok); background: var(--ok-fondo); }
+.sq[aria-pressed="true"]::before { content: "✓"; color: var(--ok); }
+.istr { color: var(--tenue); font-size: .9em; }
+.setup { display: flex; flex-direction: column; gap: 1.2em; max-width: 60ch; }
+.setup .righe { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .6em; }
+.setup input { border: 2px solid var(--linea); border-radius: var(--r); background: var(--superficie); padding: .45em .7em; width: 100%; }
+.classifica { display: flex; flex-direction: column; gap: .5em; max-width: 900px; }
+.riga { display: grid; grid-template-columns: 2.5em minmax(0, 1fr) 4em; gap: 1em; align-items: center; background: var(--superficie); border: 2px solid var(--linea); border-radius: var(--r); padding: .6em 1em; font-size: clamp(18px, 2vw, 34px); }
+.riga:first-child { border-color: var(--segnale); }
+.riga .pos { font-family: var(--f-display); font-weight: 700; color: var(--tenue); }
+.riga .pt { font-family: var(--f-display); font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .timer .riemp { transition: none !important; } }
+</style>
+</head>
+<body>
+
+
+<header class="testa gutter"><h1>Quiz di ripartenza</h1><span class="info" id="info">Lezioni 1–26 · cosa ricordiamo da giugno?</span></header>
+<main class="scena gutter" id="scena"></main>
+
+<script>
+(function () {
+  'use strict';
+  var D = [
+    ['Lezione 3-4 · Client/server', 'Nell\'app della nave, chi invia per primo la richiesta HTTP?', ['L\'app sul telefono (il client)', 'Il server', 'Il database', 'Il sensore della batteria'], 0, 'Nel modello client/server è il client che chiede e il server che risponde. Il server non "chiama" l\'app di sua iniziativa (le notifiche push sono un caso speciale che vedremo).'],
+    ['Lezione 3-4 · Formato dei dati', 'In quale formato viaggiano i dati nella quasi totalità delle API REST di oggi?', ['XML', 'CSV', 'JSON', 'HTML'], 2, 'JSON: testo leggibile da persone e programmi, con oggetti { } e array [ ]. È anche la sintassi degli oggetti JavaScript.'],
+    ['Lezione 21-22 · Metodi HTTP', 'Per modificare SOLO la soglia massima di un sensore, quale metodo usi?', ['GET', 'POST', 'PUT', 'PATCH'], 3, 'PATCH aggiorna solo i campi inviati. PUT sostituisce la risorsa intera: dovresti mandare tutti i campi del sensore.'],
+    ['Lezione 21-22 · Status code', 'Il server risponde 404. Che cosa vuol dire?', ['Il server è spento', 'Non hai fatto il login', 'È andato tutto bene ma la risposta è vuota', 'La risorsa richiesta non esiste'], 3, '404 Not Found: l\'URL non corrisponde a nessuna risorsa. Se il server fosse spento non riceveresti nessuno status code.'],
+    ['Lezione 21-22 · Status code', 'Qual è la differenza tra 401 e 403?', ['Sono sinonimi', '401 è un errore del server, 403 del client', '401: il server non sa chi sei. 403: sa chi sei, ma non hai il permesso', '403 significa che il token è scaduto'], 2, '401 Unauthorized riguarda l\'autenticazione (chi sei), 403 Forbidden riguarda l\'autorizzazione (cosa puoi fare). Un token scaduto dà 401.'],
+    ['Lezione 21-22 · Naming', 'Quale URL rispetta le convenzioni REST?', ['/api/v1/ships/NA00001/sensors', '/api/v1/getSensors?nave=NA00001', '/api/v1/ship/NA00001/sensor/list', '/api/v1/Sensori_Nave'], 0, 'Sostantivi al plurale, niente verbi nell\'URL (l\'azione la dice il metodo HTTP), gerarchia nave → sensori.'],
+    ['Lezione 5-6 · Requisiti', 'Quale di questi è un requisito NON funzionale?', ['L\'operatore può chiudere un allarme', 'L\'app mostra lo storico delle letture', 'Il capo macchina modifica le soglie', 'La dashboard si aggiorna entro 2 secondi'], 3, 'I requisiti non funzionali descrivono come si comporta il sistema (prestazioni, sicurezza, usabilità), non che cosa fa.'],
+    ['Lezione 5-6 · Priorità', 'Nel metodo MoSCoW, che cosa indica la W?', ['Want: lo vogliamo', 'Wish: sarebbe bello', 'Won\'t have: in questa versione non lo facciamo', 'Weekly: da fare ogni settimana'], 2, 'Must, Should, Could, Won\'t. Decidere che cosa NON fare è parte della progettazione.'],
+    ['Lezione 7-8 · Pattern', 'Nel pattern MVVM, dove sta la logica che prepara i dati per la schermata?', ['Nella View', 'Nel Model', 'Nel ViewModel', 'Nel database'], 2, 'La View disegna e basta, il Model rappresenta i dati, il ViewModel li trasforma in quello che la View deve mostrare.'],
+    ['Lezione 9-10 · UX', 'Lo spinner che gira mentre l\'app carica i dati applica quale euristica di Nielsen?', ['Visibilità dello stato del sistema', 'Estetica e design minimalista', 'Prevenzione degli errori', 'Flessibilità ed efficienza d\'uso'], 0, 'L\'utente deve sempre sapere che cosa sta succedendo. Senza spinner sembra che l\'app si sia bloccata.'],
+    ['Lezione 13-14 · Wireframe', 'A che cosa serve un wireframe a bassa fedeltà?', ['A decidere struttura e posizione dei contenuti, senza grafica definitiva', 'A mostrare al cliente l\'app finita', 'A generare il codice dell\'interfaccia', 'A misurare le prestazioni'], 0, 'Si disegna in pochi minuti e si butta senza rimpianti: serve a discutere la struttura prima di investire tempo nella grafica.'],
+    ['Lezione 19-20 · Modello ER', 'Una nave ha molti sensori, ogni sensore è montato su una sola nave. Che relazione è?', ['1 : 1', '1 : N', 'N : M', 'Nessuna relazione'], 1, 'Uno a molti: nella tabella Sensore c\'è la chiave esterna id_nave.'],
+    ['Lezione 23-24 · OpenAPI', 'In un file OpenAPI, a che cosa serve $ref?', ['A indicare l\'URL del server', 'A scrivere un commento', 'A riusare uno schema definito una volta in components', 'A importare una libreria'], 2, 'Lo schema Sensore si scrive una volta in components/schemas e si richiama ovunque con $ref: se cambia, cambia in tutti gli endpoint.'],
+    ['Lezione 25-26 · Caching', 'Che cosa fa la strategia network-first?', ['Usa sempre e solo la cache', 'Usa la cache e non chiede mai al server', 'Scarica tutto all\'avvio dell\'app', 'Chiede al server; se la rete non c\'è, usa i dati in cache'], 3, 'Dati freschi quando possibile, dati vecchi invece di una schermata vuota quando la rete manca. Su una nave in mezzo al mare succede spesso.'],
+    ['Lezione 21-22 · Sicurezza', 'Il payload di un token JWT è…', ['Cifrato: illeggibile senza la chiave', 'Leggibile da chiunque abbia il token: è solo codificato', 'La password dell\'utente', 'Visibile solo al server'], 1, 'Header e payload sono in Base64URL: si decodificano senza chiavi. La firma impedisce di modificarli, non di leggerli. Lo verificheremo sulla Nave virtuale.']
+  ];
+  var SEC = 30;
+  var stato = { fase: 'setup', i: 0, squadre: [], punti: {}, giuste: {}, rivelata: false };
+  var timer = null, resto = SEC;
+  var scena = document.getElementById('scena');
+  var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  try { var s = JSON.parse(localStorage.getItem('quizRipartenza:v1')); if (s && s.squadre) stato = s; } catch (e) {}
+  function salva() { try { localStorage.setItem('quizRipartenza:v1', JSON.stringify(stato)); } catch (e) {} }
+
+  function setup() {
+    var nomi = stato.squadre.length ? stato.squadre : ['Squadra 1', 'Squadra 2', 'Squadra 3', 'Squadra 4', 'Squadra 5', 'Squadra 6'];
+    scena.innerHTML = '<div class="setup"><span class="occhiello">Prima di iniziare</span><h2 class="domanda" style="font-size:clamp(28px,3vw,52px)">Come funziona</h2>' +
+      '<p>15 domande sugli argomenti dell\'anno scorso. Ogni squadra ha 30 secondi per accordarsi e alzare il cartello con la lettera (A, B, C, D). Ogni risposta giusta vale 1 punto. Il punteggio si può sommare a quello delle missioni sulla Nave virtuale.</p>' +
+      '<div class="righe" id="righe">' + nomi.map(function (n, i) { return '<input id="sq' + i + '" value="' + esc(n) + '" aria-label="Nome squadra ' + (i + 1) + '">'; }).join('') + '</div>' +
+      '<div class="comandi"><button class="btn sec" id="piu">+ Squadra</button><button class="btn sec" id="meno">− Squadra</button><button class="btn primario" id="via">Inizia il quiz</button></div>' +
+      '<p class="istr">Comandi da tastiera: barra spaziatrice per avviare il timer o mostrare la risposta, freccia destra per la domanda successiva.</p></div>';
+    var n = nomi.length;
+    document.getElementById('piu').onclick = function () { stato.squadre = leggiNomi().concat('Squadra ' + (n + 1)); setup(); };
+    document.getElementById('meno').onclick = function () { stato.squadre = leggiNomi().slice(0, Math.max(1, n - 1)); setup(); };
+    document.getElementById('via').onclick = function () {
+      stato.squadre = leggiNomi().filter(function (x) { return x.trim(); });
+      stato.punti = {}; stato.squadre.forEach(function (x) { stato.punti[x] = 0; });
+      stato.fase = 'domanda'; stato.i = 0; stato.giuste = {}; stato.rivelata = false; salva(); domanda();
+    };
+    function leggiNomi() { var a = []; for (var i = 0; i < n; i++) a.push(document.getElementById('sq' + i).value); return a; }
+  }
+
+  function domanda() {
+    clearInterval(timer); resto = SEC;
+    var q = D[stato.i];
+    document.getElementById('info').textContent = 'Domanda ' + (stato.i + 1) + ' di ' + D.length;
+    scena.innerHTML = '<span class="occhiello">' + esc(q[0]) + '</span><h2 class="domanda">' + esc(q[1]) + '</h2>' +
+      '<div class="opzioni">' + q[2].map(function (o, k) {
+        var cl = stato.rivelata ? (k === q[3] ? ' giusta' : ' sbagliata') : '';
+        return '<div class="opz' + cl + '"><span class="lett">' + 'ABCD'[k] + '</span><span>' + esc(o) + '</span></div>';
+      }).join('') + '</div>' +
+      (stato.rivelata ? '<div class="spiega">' + esc(q[4]) + '</div>' : '') +
+      '<div class="fascia">' +
+      (stato.rivelata
+        ? '<div><div class="istr">Tocca le squadre che hanno risposto ' + 'ABCD'[q[3]] + ':</div><div class="squadre">' + stato.squadre.map(function (x, k) {
+            return '<button class="sq" data-k="' + k + '" aria-pressed="' + (stato.giuste[x] ? 'true' : 'false') + '">' + esc(x) + '<span class="p">' + stato.punti[x] + '</span></button>'; }).join('') + '</div></div>' +
+          '<div class="comandi"><button class="btn primario" id="avanti">' + (stato.i < D.length - 1 ? 'Prossima domanda →' : 'Classifica finale') + '</button></div>'
+        : '<div class="timer"><span class="num" id="num">' + SEC + '</span><div class="barra"><div class="riemp" id="riemp"></div></div></div>' +
+          '<div class="comandi"><button class="btn sec" id="avvia">Avvia timer</button><button class="btn primario" id="rivela">Mostra la risposta</button></div>') +
+      '</div>';
+    if (stato.rivelata) {
+      scena.querySelectorAll('.sq').forEach(function (b) {
+        b.onclick = function () { var x = stato.squadre[b.dataset.k]; stato.giuste[x] = !stato.giuste[x]; b.setAttribute('aria-pressed', stato.giuste[x] ? 'true' : 'false'); salva(); };
+      });
+      document.getElementById('avanti').onclick = avanti;
+    } else {
+      document.getElementById('avvia').onclick = avviaTimer;
+      document.getElementById('rivela').onclick = rivela;
+    }
+  }
+  function avviaTimer() {
+    if (timer) return;
+    var fine = Date.now() + SEC * 1000;
+    timer = setInterval(function () {
+      resto = Math.max(0, Math.ceil((fine - Date.now()) / 1000));
+      var n = document.getElementById('num'), r = document.getElementById('riemp');
+      if (n) n.textContent = resto;
+      if (r) r.style.width = Math.max(0, (fine - Date.now()) / (SEC * 10)) + '%';
+      if (resto <= 0) { clearInterval(timer); timer = null; }
+    }, 100);
+  }
+  function rivela() { clearInterval(timer); timer = null; stato.rivelata = true; stato.giuste = {}; salva(); domanda(); }
+  function avanti() {
+    stato.squadre.forEach(function (x) { if (stato.giuste[x]) stato.punti[x]++; });
+    stato.giuste = {}; stato.rivelata = false;
+    if (stato.i < D.length - 1) { stato.i++; salva(); domanda(); } else { stato.fase = 'fine'; salva(); fine(); }
+  }
+  function fine() {
+    clearInterval(timer);
+    document.getElementById('info').textContent = 'Fine del quiz';
+    var ord = stato.squadre.slice().sort(function (a, b) { return stato.punti[b] - stato.punti[a]; });
+    scena.innerHTML = '<span class="occhiello">Classifica</span><h2 class="domanda">Si salpa con questi punti</h2><div class="classifica">' +
+      ord.map(function (x, k) { return '<div class="riga"><span class="pos">' + (k + 1) + '°</span><span>' + esc(x) + '</span><span class="pt">' + stato.punti[x] + '</span></div>'; }).join('') +
+      '</div><div class="comandi"><button class="btn sec" id="ricomincia">Nuovo quiz</button></div>';
+    document.getElementById('ricomincia').onclick = function () { stato.fase = 'setup'; salva(); setup(); };
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.target.tagName === 'INPUT') return;
+    if (stato.fase !== 'domanda') return;
+    if (e.key === ' ') { e.preventDefault(); if (!stato.rivelata) { if (!timer) avviaTimer(); else rivela(); } }
+    if (e.key === 'ArrowRight' && stato.rivelata) avanti();
+  });
+  ({ setup: setup, domanda: domanda, fine: fine })[stato.fase]();
+})();
+</script>
+
+</body>
+</html>

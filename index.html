@@ -1,0 +1,768 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Nave Virtuale</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: plancia di comando. Barra strumenti in alto, a sinistra il banco di prova HTTP
+   (richiesta sopra, risposta sotto), a destra il registro di bordo con missioni, endpoint, token e cronologia. */
+:root {
+  --carta: #edf2f2;          /* fondo: carta nautica */
+  --superficie: #fbfcfc;
+  --incavo: #e3eaeb;         /* campi e aree di codice */
+  --inchiostro: #10293a;
+  --tenue: #566b77;
+  --linea: #c6d3d7;
+  --segnale: #c8460d;        /* arancio internazionale (salvagenti) */
+  --segnale-fondo: #fbe6dc;
+  --ok: #1d7a4c;  --ok-fondo: #dcefe4;
+  --avviso: #9a6a00; --avviso-fondo: #f6ead0;
+  --critico: #b5302a; --critico-fondo: #f6dddb;
+  --info: #2a5f8a; --info-fondo: #dce8f2;
+  --f-display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --f-testo: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --barra-fondo: #10293a; --barra-testo: #edf2f2;
+  --r: 6px;
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px;
+  --j-chiave: #8a3b9a; --j-stringa: #1d7a4c; --j-numero: #2a5f8a; --j-lit: #c8460d;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --carta: #0b1620; --superficie: #102030; --incavo: #0a1824; --inchiostro: #dbe6ea; --tenue: #8ea3ae; --linea: #24394a;
+  --segnale: #ff7a3d; --segnale-fondo: #3a2216;
+  --ok: #5cc98f; --ok-fondo: #12301f; --avviso: #e2b04a; --avviso-fondo: #33290f; --critico: #ff6b60; --critico-fondo: #3a1716; --info: #7fb3e0; --info-fondo: #142a3d;
+  --j-chiave: #d29be0; --j-stringa: #7fd6a3; --j-numero: #8cc0ef; --j-lit: #ff9a66;
+  --barra-fondo: #050d14; --barra-testo: #dbe6ea;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --carta: #0b1620; --superficie: #102030; --incavo: #0a1824; --inchiostro: #dbe6ea; --tenue: #8ea3ae; --linea: #24394a;
+  --segnale: #ff7a3d; --segnale-fondo: #3a2216;
+  --ok: #5cc98f; --ok-fondo: #12301f; --avviso: #e2b04a; --avviso-fondo: #33290f; --critico: #ff6b60; --critico-fondo: #3a1716; --info: #7fb3e0; --info-fondo: #142a3d;
+  --j-chiave: #d29be0; --j-stringa: #7fd6a3; --j-numero: #8cc0ef; --j-lit: #ff9a66;
+  --barra-fondo: #050d14; --barra-testo: #dbe6ea;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--carta); color: var(--inchiostro); font-family: var(--f-testo); font-size: 15px; line-height: 1.5; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--barra-fondo); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--segnale); outline-offset: 2px; }
+code, pre, .mono { font-family: var(--f-mono); font-size: 13px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; letter-spacing: .02em; text-wrap: balance; margin: 0; }
+.etichetta { font-family: var(--f-display); font-weight: 600; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--tenue); }
+
+/* ── Barra superiore ── */
+.barra { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--barra-fondo); color: var(--barra-testo);
+  padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.barra-int { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3) var(--s5); max-width: 1500px; margin: 0 auto; }
+.marchio { display: flex; align-items: baseline; gap: var(--s2); }
+.marchio h1 { font-size: 26px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.marchio span { font-family: var(--f-mono); font-size: 12px; opacity: .7; }
+.strumenti { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3) var(--s5); margin-left: auto; }
+.strumento { display: flex; flex-direction: column; gap: 0; }
+.strumento .etichetta { color: inherit; opacity: .65; font-size: 11px; }
+.strumento .val { font-family: var(--f-mono); font-size: 14px; font-variant-numeric: tabular-nums; }
+.barra select { background: transparent; border: 1px solid color-mix(in srgb, var(--barra-testo) 35%, transparent); border-radius: var(--r); padding: 2px 6px; color: var(--barra-testo); }
+.barra select option { color: var(--inchiostro); background: var(--superficie); }
+.squadra input::placeholder { color: inherit; opacity: .5; }
+.squadra input { background: transparent; border: none; border-bottom: 1px dashed color-mix(in srgb, var(--barra-testo) 50%, transparent); color: var(--barra-testo); width: 11ch; padding: 0; font-family: var(--f-mono); font-size: 14px; }
+.punti .val { font-family: var(--f-display); font-size: 24px; font-weight: 700; line-height: 1; color: var(--segnale); }
+
+/* ── Griglia principale ── */
+main { max-width: 1500px; margin: 0 auto; padding-block: var(--s5) var(--s6); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: var(--s5); align-items: start; }
+@media (max-width: 1000px) { main { grid-template-columns: minmax(0, 1fr); } }
+.colonna { display: flex; flex-direction: column; gap: var(--s5); min-width: 0; }
+.pannello { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--r); min-width: 0; }
+.pannello > header { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); padding: var(--s3) var(--s4); border-bottom: 1px solid var(--linea); flex-wrap: wrap; }
+.pannello > header h2 { font-size: 20px; }
+.corpo { padding: var(--s4); display: flex; flex-direction: column; gap: var(--s4); min-width: 0; }
+
+/* ── Richiesta ── */
+.riga-url { display: flex; gap: var(--s2); align-items: stretch; flex-wrap: wrap; }
+.metodo { font-family: var(--f-mono); font-weight: 600; border: 1px solid var(--linea); border-radius: var(--r); background: var(--incavo); padding: 0 var(--s2); min-height: 42px; }
+.url { flex: 1 1 320px; display: flex; align-items: center; border: 1px solid var(--linea); border-radius: var(--r); background: var(--incavo); min-width: 0; overflow: hidden; }
+.url .base { font-family: var(--f-mono); font-size: 13px; color: var(--tenue); padding-left: var(--s3); white-space: nowrap; }
+.url input { flex: 1; min-width: 6ch; border: none; background: transparent; font-family: var(--f-mono); font-size: 14px; padding: 10px var(--s3) 10px 1px; }
+.url input:focus { outline: none; }
+.url:focus-within { outline: 2px solid var(--segnale); outline-offset: 1px; }
+@media (max-width: 560px) { .url .base { display: none; } .url input { padding-left: var(--s3); } }
+.invia { background: var(--segnale); color: #fff; border: none; border-radius: var(--r); padding: 0 var(--s5); font-family: var(--f-display); font-size: 18px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; min-height: 42px; }
+.invia:hover { filter: brightness(1.08); }
+.invia[disabled] { opacity: .6; cursor: progress; }
+.header-lista { display: flex; flex-direction: column; gap: var(--s2); }
+.hdr { display: flex; align-items: center; gap: var(--s2); font-family: var(--f-mono); font-size: 13px; min-width: 0; }
+.hdr input[type=checkbox] { accent-color: var(--segnale); width: 16px; height: 16px; flex: none; }
+.hdr .k { color: var(--j-chiave); white-space: nowrap; }
+.hdr .v { color: var(--tenue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.hdr.spento .k, .hdr.spento .v { text-decoration: line-through; opacity: .55; }
+.hdr-custom { display: flex; gap: var(--s2); flex-wrap: wrap; }
+.hdr-custom input { font-family: var(--f-mono); font-size: 13px; border: 1px solid var(--linea); border-radius: var(--r); background: var(--incavo); padding: 6px var(--s2); flex: 1 1 140px; min-width: 0; }
+textarea#body { width: 100%; min-height: 120px; resize: vertical; font-family: var(--f-mono); font-size: 13px; border: 1px solid var(--linea); border-radius: var(--r); background: var(--incavo); padding: var(--s3); }
+.campo { display: flex; flex-direction: column; gap: var(--s2); }
+.suggerimento { color: var(--tenue); font-size: 13px; }
+
+/* ── Risposta ── */
+.esito { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); }
+.status { font-family: var(--f-display); font-weight: 700; font-size: 22px; letter-spacing: .04em; padding: 2px 12px; border-radius: var(--r); }
+.s2 { background: var(--ok-fondo); color: var(--ok); }
+.s4 { background: var(--avviso-fondo); color: var(--avviso); }
+.s4.s401, .s4.s403 { background: var(--critico-fondo); color: var(--critico); }
+.s5, .s0 { background: var(--critico-fondo); color: var(--critico); }
+.metriche { display: flex; gap: var(--s4); flex-wrap: wrap; font-family: var(--f-mono); font-size: 12px; color: var(--tenue); }
+.schede { display: flex; gap: var(--s1); border-bottom: 1px solid var(--linea); overflow-x: auto; }
+.schede button { background: none; border: none; border-bottom: 2px solid transparent; padding: var(--s2) var(--s3); cursor: pointer; font-family: var(--f-display); font-weight: 600; font-size: 15px; letter-spacing: .06em; text-transform: uppercase; color: var(--tenue); white-space: nowrap; }
+.schede button[aria-selected="true"] { color: var(--inchiostro); border-bottom-color: var(--segnale); }
+.schede button .conta { font-family: var(--f-mono); font-size: 11px; background: var(--incavo); border-radius: 10px; padding: 0 6px; margin-left: 4px; }
+pre.codice { margin: 0; background: var(--incavo); border-radius: var(--r); padding: var(--s3) var(--s4); overflow: auto; max-height: 460px; line-height: 1.55; white-space: pre; }
+.jk { color: var(--j-chiave); } .js { color: var(--j-stringa); } .jn { color: var(--j-numero); } .jl { color: var(--j-lit); font-weight: 600; }
+.vuoto { color: var(--tenue); font-size: 14px; padding: var(--s4); border: 1px dashed var(--linea); border-radius: var(--r); }
+.avviso-salvato { background: var(--info-fondo); color: var(--info); border-radius: var(--r); padding: var(--s2) var(--s3); font-size: 14px; }
+.btn-sec { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--r); padding: 4px 10px; cursor: pointer; font-size: 13px; }
+.btn-sec:hover { border-color: var(--tenue); }
+
+/* ── Missioni ── */
+.missioni { display: flex; flex-direction: column; gap: var(--s3); }
+.giornata { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s3); flex-wrap: wrap; margin-top: var(--s2); }
+.giornata h3 { font-size: 18px; }
+.missione { border: 1px solid var(--linea); border-radius: var(--r); background: var(--superficie); }
+.missione > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: var(--s3); align-items: center; padding: var(--s3); }
+.missione > summary::-webkit-details-marker { display: none; }
+.missione .num { font-family: var(--f-display); font-weight: 700; font-size: 18px; color: var(--tenue); text-align: center; }
+.missione .tit { font-weight: 700; }
+.missione .pt { font-family: var(--f-mono); font-size: 12px; color: var(--tenue); white-space: nowrap; }
+.missione.fatta { border-color: color-mix(in srgb, var(--ok) 45%, var(--linea)); }
+.missione.fatta .num { color: var(--ok); }
+.missione.fatta .pt { color: var(--ok); }
+.missione .dentro { padding: 0 var(--s3) var(--s3) calc(30px + var(--s3) * 2); display: flex; flex-direction: column; gap: var(--s3); }
+@media (max-width: 480px) { .missione .dentro { padding-left: var(--s3); } }
+.missione p { margin: 0; max-width: 65ch; }
+.domanda { font-weight: 700; }
+.risposta { display: flex; gap: var(--s2); flex-wrap: wrap; }
+.risposta input { flex: 1 1 160px; border: 1px solid var(--linea); border-radius: var(--r); background: var(--incavo); padding: 6px var(--s2); font-family: var(--f-mono); min-width: 0; }
+.risposta button { background: var(--inchiostro); color: var(--carta); border: none; border-radius: var(--r); padding: 6px 14px; cursor: pointer; font-weight: 700; }
+.esito-m { font-size: 14px; border-radius: var(--r); padding: var(--s2) var(--s3); }
+.esito-m.si { background: var(--ok-fondo); color: var(--ok); }
+.esito-m.no { background: var(--critico-fondo); color: var(--critico); }
+.aiuto { font-size: 14px; color: var(--tenue); background: var(--incavo); border-radius: var(--r); padding: var(--s2) var(--s3); }
+.link { background: none; border: none; padding: 0; color: var(--segnale); text-decoration: underline; cursor: pointer; font-size: 13px; }
+.sblocco { display: flex; gap: var(--s2); flex-wrap: wrap; align-items: center; padding: var(--s3); border: 1px dashed var(--linea); border-radius: var(--r); }
+.sblocco input { border: 1px solid var(--linea); border-radius: var(--r); background: var(--incavo); padding: 6px var(--s2); font-family: var(--f-mono); width: 12ch; }
+
+/* ── Endpoint ── */
+.ep-gruppo { display: flex; flex-direction: column; gap: var(--s1); }
+.ep { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: var(--s2); align-items: baseline; padding: 6px var(--s2); border-radius: var(--r); cursor: pointer; background: none; border: none; text-align: left; width: 100%; }
+.ep:hover { background: var(--incavo); }
+.ep .m { font-family: var(--f-mono); font-size: 12px; font-weight: 600; }
+.m-GET { color: var(--ok); } .m-POST { color: var(--info); } .m-PATCH { color: var(--avviso); } .m-DELETE, .m-PUT { color: var(--critico); }
+.ep .p { font-family: var(--f-mono); font-size: 13px; overflow-wrap: anywhere; }
+.ep .d { grid-column: 2; font-size: 13px; color: var(--tenue); }
+.tabella { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tabella td, .tabella th { text-align: left; padding: 4px var(--s2); border-bottom: 1px solid var(--linea); vertical-align: top; }
+.tabella th { font-family: var(--f-display); letter-spacing: .08em; text-transform: uppercase; color: var(--tenue); font-weight: 600; }
+
+/* ── Cronologia ── */
+.cron { display: flex; flex-direction: column; }
+.cron button { display: grid; grid-template-columns: 54px 56px minmax(0, 1fr) auto; gap: var(--s2); align-items: center; text-align: left; background: none; border: none; border-bottom: 1px solid var(--linea); padding: 6px var(--s1); cursor: pointer; font-family: var(--f-mono); font-size: 12px; }
+.cron button:hover { background: var(--incavo); }
+.cron .p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cron .t { color: var(--tenue); }
+.mini { font-family: var(--f-mono); font-size: 11px; font-weight: 600; border-radius: 4px; padding: 1px 6px; text-align: center; }
+
+/* ── Token ── */
+.jwt { font-family: var(--f-mono); font-size: 12px; overflow-wrap: anywhere; background: var(--incavo); border-radius: var(--r); padding: var(--s3); line-height: 1.6; }
+.jwt .a { color: var(--critico); } .jwt .b { color: var(--j-chiave); } .jwt .c { color: var(--info); }
+.scadenza { font-family: var(--f-mono); font-size: 13px; }
+
+/* ── Plancia (vista docente, #plancia) ── */
+#plancia { max-width: 1500px; margin: 0 auto; padding-block: var(--s5) var(--s6); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: var(--s5); }
+.plancia-testa { display: flex; flex-wrap: wrap; gap: var(--s3) var(--s6); align-items: baseline; }
+.plancia-testa h2 { font-size: 40px; }
+.strumenti-griglia { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: var(--s4); }
+.gauge { background: var(--superficie); border: 1px solid var(--linea); border-radius: var(--r); padding: var(--s4); display: flex; flex-direction: column; gap: var(--s2); }
+.gauge.AVVISO { border-color: var(--avviso); }
+.gauge.CRITICO { border-color: var(--critico); box-shadow: 0 0 0 2px var(--critico-fondo); }
+.gauge .nome { font-size: 14px; min-height: 2.6em; }
+.gauge .lettura { font-family: var(--f-display); font-size: 44px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.gauge .lettura small { font-size: 18px; color: var(--tenue); margin-left: 4px; }
+.scala { position: relative; height: 10px; background: var(--incavo); border-radius: 5px; }
+.scala .ok { position: absolute; top: 0; bottom: 0; background: var(--ok-fondo); border-left: 2px solid var(--ok); border-right: 2px solid var(--ok); }
+.scala .ago { position: absolute; top: -4px; width: 3px; height: 18px; background: var(--inchiostro); border-radius: 2px; transform: translateX(-1px); transition: left .6s; }
+.scala-et { display: flex; justify-content: space-between; font-family: var(--f-mono); font-size: 11px; color: var(--tenue); }
+.chip { font-family: var(--f-display); font-weight: 700; letter-spacing: .08em; font-size: 13px; padding: 1px 8px; border-radius: 4px; align-self: flex-start; }
+.chip.OK { background: var(--ok-fondo); color: var(--ok); } .chip.AVVISO { background: var(--avviso-fondo); color: var(--avviso); }
+.chip.CRITICO { background: var(--critico-fondo); color: var(--critico); } .chip.DISATTIVO { background: var(--incavo); color: var(--tenue); }
+@media (prefers-reduced-motion: reduce) { .scala .ago { transition: none; } }
+footer.piede { max-width: 1500px; margin: 0 auto; padding-block: 0 var(--s6); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); color: var(--tenue); font-size: 13px; display: flex; gap: var(--s4); flex-wrap: wrap; }
+.piede a { color: inherit; }
+</style>
+</head>
+<body>
+
+
+<header class="barra">
+  <div class="barra-int">
+    <div class="marchio"><h1>Nave virtuale</h1><span>API REST · v1</span></div>
+    <div class="strumenti">
+      <div class="strumento"><span class="etichetta">Ora di bordo (UTC)</span><span class="val" id="orologio">--:--:--</span></div>
+      <label class="strumento"><span class="etichetta">Rete</span>
+        <select id="rete"><option value="normale">normale</option><option value="lenta">lenta (3G)</option><option value="offline">assente</option></select></label>
+      <label class="strumento squadra"><span class="etichetta">Squadra</span><input id="squadra" value="" placeholder="nome" maxlength="18" autocomplete="off"></label>
+      <div class="strumento punti"><span class="etichetta">Punti</span><span class="val" id="punti">0</span></div>
+    </div>
+  </div>
+</header>
+
+<main id="console">
+  <div class="colonna">
+    <section class="pannello" aria-labelledby="t-rich">
+      <header><h2 id="t-rich">Richiesta</h2><span class="suggerimento">Invia con Ctrl + Invio</span></header>
+      <div class="corpo">
+        <form class="riga-url" id="form-rich">
+          <select class="metodo" id="metodo" aria-label="Metodo HTTP">
+            <option>GET</option><option>POST</option><option>PATCH</option><option>PUT</option><option>DELETE</option>
+          </select>
+          <div class="url"><span class="base" id="base-url"></span><input id="path" value="/ships" aria-label="Percorso dell'endpoint" spellcheck="false" autocomplete="off"></div>
+          <button class="invia" id="invia" type="submit">Invia</button>
+        </form>
+        <div class="campo">
+          <span class="etichetta">Header</span>
+          <div class="header-lista">
+            <label class="hdr" id="hdr-auth"><input type="checkbox" id="usa-token"><span class="k">Authorization:</span><span class="v" id="hdr-auth-v">nessun token: fai prima il login</span></label>
+            <label class="hdr" id="hdr-ct"><input type="checkbox" id="usa-ct" checked><span class="k">Content-Type:</span><span class="v">application/json</span></label>
+            <div class="hdr-custom"><input id="hk" placeholder="altro header (nome)" aria-label="Nome header personalizzato" spellcheck="false"><input id="hv" placeholder="valore" aria-label="Valore header personalizzato" spellcheck="false"></div>
+          </div>
+        </div>
+        <div class="campo" id="campo-body" hidden>
+          <label class="etichetta" for="body">Body (JSON)</label>
+          <textarea id="body" spellcheck="false">{
+  "email": "",
+  "password": ""
+}</textarea>
+        </div>
+      </div>
+    </section>
+
+    <section class="pannello" aria-labelledby="t-risp">
+      <header><h2 id="t-risp">Risposta</h2><div class="esito" id="esito"></div></header>
+      <div class="corpo">
+        <div class="schede" role="tablist" id="schede-risp">
+          <button role="tab" aria-selected="true" data-v="body">Body</button>
+          <button role="tab" aria-selected="false" data-v="header">Header</button>
+          <button role="tab" aria-selected="false" data-v="codice">Codice fetch()</button>
+        </div>
+        <div id="avviso-token" class="avviso-salvato" hidden></div>
+        <div id="vista-risp"><div class="vuoto">Nessuna risposta ancora. Prova a inviare <code>GET /ships</code> e guarda che cosa risponde il server.</div></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="colonna">
+    <section class="pannello" aria-label="Registro di bordo">
+      <div class="corpo" style="padding-bottom:0">
+        <div class="schede" role="tablist" id="schede-lato">
+          <button role="tab" aria-selected="true" data-v="missioni">Missioni</button>
+          <button role="tab" aria-selected="false" data-v="endpoint">Endpoint</button>
+          <button role="tab" aria-selected="false" data-v="token">Token</button>
+          <button role="tab" aria-selected="false" data-v="cronologia">Cronologia<span class="conta" id="n-cron">0</span></button>
+        </div>
+      </div>
+      <div class="corpo" id="vista-lato"></div>
+    </section>
+  </div>
+</main>
+
+<section id="plancia" hidden aria-label="Plancia"></section>
+
+<footer class="piede">
+  <span>Simulatore didattico: le chiamate a <code>https://api.nave.example/v1</code> sono gestite dal file <code>nave.js</code> dentro il browser.</span>
+  <a href="#plancia" id="link-vista">Vista plancia (docente)</a>
+</footer>
+
+<script src="nave.js"></script>
+<script>
+(function () {
+  'use strict';
+  var $ = function (s) { return document.querySelector(s); };
+  var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var CH = 'naveConsole:v1';
+  var mem = leggi();
+  function leggi() { try { var s = localStorage.getItem(CH); if (s) return JSON.parse(s); } catch (e) {} return {}; }
+  function scrivi() { try { localStorage.setItem(CH, JSON.stringify(mem)); } catch (e) {} }
+  mem.fatte = mem.fatte || {}; mem.aiuti = mem.aiuti || {}; mem.cron = mem.cron || []; mem.sbloccati = mem.sbloccati || {};
+
+  $('#base-url').textContent = Nave.BASE_URL;
+  $('#squadra').value = mem.squadra || '';
+  $('#squadra').addEventListener('input', function () { mem.squadra = this.value; scrivi(); });
+  $('#rete').addEventListener('change', function () { Nave.config.rete = this.value; });
+
+  // ── Orologio di bordo
+  function orologio() { $('#orologio').textContent = new Date().toISOString().slice(11, 19); }
+  setInterval(orologio, 1000); orologio();
+
+  // ── Token
+  function aggiornaHeaderToken() {
+    var t = mem.token;
+    var cb = $('#usa-token');
+    cb.disabled = !t;
+    if (!t) { cb.checked = false; $('#hdr-auth-v').textContent = 'nessun token: fai prima il login'; }
+    else $('#hdr-auth-v').textContent = 'Bearer ' + t.slice(0, 18) + '…' + t.slice(-6);
+    $('#hdr-auth').classList.toggle('spento', !cb.checked);
+  }
+  $('#usa-token').addEventListener('change', function () { mem.usaToken = this.checked; scrivi(); aggiornaHeaderToken(); });
+  $('#usa-ct').addEventListener('change', function () { $('#hdr-ct').classList.toggle('spento', !this.checked); });
+
+  // ── Metodo e body
+  function aggiornaBody() {
+    var m = $('#metodo').value;
+    $('#campo-body').hidden = (m === 'GET' || m === 'DELETE');
+  }
+  $('#metodo').addEventListener('change', aggiornaBody);
+
+  function headersCorrenti() {
+    var h = {};
+    if ($('#usa-token').checked && mem.token) h['Authorization'] = 'Bearer ' + mem.token;
+    var conBody = !$('#campo-body').hidden && $('#body').value.trim();
+    if ($('#usa-ct').checked && conBody) h['Content-Type'] = 'application/json';
+    var k = $('#hk').value.trim(); if (k) h[k] = $('#hv').value;
+    return h;
+  }
+
+  // ── Invio
+  var ultima = null;
+  $('#form-rich').addEventListener('submit', function (e) { e.preventDefault(); invia(); });
+  document.addEventListener('keydown', function (e) { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); invia(); } });
+
+  function invia() {
+    var metodo = $('#metodo').value;
+    var path = $('#path').value.trim();
+    if (path && path.charAt(0) !== '/') path = '/' + path;
+    var url = Nave.BASE_URL + path;
+    var headers = headersCorrenti();
+    var opz = { method: metodo, headers: headers };
+    var testoBody = !$('#campo-body').hidden ? $('#body').value.trim() : '';
+    if (testoBody) opz.body = testoBody;
+    var btn = $('#invia'); btn.disabled = true; btn.textContent = 'In viaggio…';
+    $('#esito').innerHTML = '<span class="metriche">attendo la risposta…</span>';
+    var t0 = performance.now();
+    fetch(url, opz).then(function (r) {
+      return r.text().then(function (txt) {
+        var h = {}; r.headers.forEach(function (v, k) { h[k] = v; });
+        var dati = null; try { dati = txt ? JSON.parse(txt) : null; } catch (er) {}
+        mostra({ metodo: metodo, url: url, path: path, headers: headers, body: testoBody, status: r.status, statusText: r.statusText, h: h, testo: txt, dati: dati, ms: Math.round(performance.now() - t0) });
+      });
+    }).catch(function (err) {
+      mostra({ metodo: metodo, url: url, path: path, headers: headers, body: testoBody, status: 0, statusText: 'Errore di rete', errore: err.message, ms: Math.round(performance.now() - t0) });
+    }).then(function () { btn.disabled = false; btn.textContent = 'Invia'; });
+  }
+
+  function mostra(r) {
+    ultima = r;
+    var cl = 's' + String(r.status).charAt(0) + ' s' + r.status;
+    $('#esito').innerHTML = '<span class="status ' + cl + '">' + (r.status || '—') + ' ' + esc(r.statusText || '') + '</span>' +
+      '<span class="metriche"><span>' + r.ms + ' ms</span>' + (r.testo ? '<span>' + new Blob([r.testo]).size + ' byte</span>' : '') + '</span>';
+    // Login riuscito: salvo i token come farebbe un'app
+    var av = $('#avviso-token'); av.hidden = true;
+    if (r.status === 200 && r.dati && r.dati.access_token) {
+      mem.token = r.dati.access_token; if (r.dati.refresh_token) mem.refresh = r.dati.refresh_token;
+      mem.usaToken = true; $('#usa-token').checked = true; scrivi(); aggiornaHeaderToken();
+      av.hidden = false; av.textContent = 'Token salvato: da ora la console lo aggiunge all\'header Authorization delle richieste. Lo trovi nella scheda Token.';
+      if (schedaLato === 'token') disegnaLato();
+    }
+    if (r.status === 204 && /\/auth\/logout$/.test(r.path)) { av.hidden = false; av.textContent = 'Logout eseguito: il token è stato revocato dal server, ma la console lo tiene ancora. Prova a riusarlo.'; }
+    mem.cron.unshift({ metodo: r.metodo, path: r.path, status: r.status, ms: r.ms, body: r.body, ora: new Date().toISOString().slice(11, 19) });
+    mem.cron = mem.cron.slice(0, 60); scrivi();
+    $('#n-cron').textContent = mem.cron.length;
+    disegnaRisposta();
+    if (schedaLato === 'cronologia') disegnaLato();
+  }
+
+  // ── Viste della risposta
+  var schedaRisp = 'body';
+  schede('#schede-risp', function (v) { schedaRisp = v; disegnaRisposta(); });
+  function schede(sel, cb) {
+    var cont = $(sel);
+    cont.addEventListener('click', function (e) {
+      var b = e.target.closest('button[role=tab]'); if (!b) return;
+      cont.querySelectorAll('button[role=tab]').forEach(function (x) { x.setAttribute('aria-selected', x === b ? 'true' : 'false'); });
+      cb(b.dataset.v);
+    });
+  }
+  function jsonHtml(testo) {
+    return esc(testo).replace(/(&quot;(?:[^&]|&(?!quot;))*?&quot;)(\s*:)?|\b(true|false|null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g, function (m, str, colon, lit, num) {
+      if (str) return colon ? '<span class="jk">' + str + '</span>' + colon : '<span class="js">' + str + '</span>';
+      if (lit) return '<span class="jl">' + lit + '</span>';
+      return '<span class="jn">' + num + '</span>';
+    });
+  }
+  function codiceFetch(r) {
+    var righe = [];
+    var h = Object.assign({}, r.headers);
+    var conToken = !!h['Authorization'];
+    if (conToken) { righe.push('const TOKEN = "' + h['Authorization'].replace(/^Bearer /, '') + '";', ''); h['Authorization'] = '__TOKEN__'; }
+    righe.push('const risposta = await fetch("' + r.url + '", {');
+    righe.push('  method: "' + r.metodo + '",');
+    var hk = Object.keys(h);
+    if (hk.length) {
+      righe.push('  headers: {');
+      hk.forEach(function (k, i) {
+        var v = h[k] === '__TOKEN__' ? '"Bearer " + TOKEN' : JSON.stringify(h[k]);
+        righe.push('    "' + k + '": ' + v + (i < hk.length - 1 ? ',' : ''));
+      });
+      righe.push('  }' + (r.body ? ',' : ''));
+    }
+    if (r.body) {
+      var b; try { b = 'JSON.stringify(' + JSON.stringify(JSON.parse(r.body), null, 2).replace(/\n/g, '\n  ') + ')'; } catch (e) { b = JSON.stringify(r.body); }
+      righe.push('  body: ' + b);
+    }
+    righe.push('});', '');
+    righe.push('console.log(risposta.status);   // ' + (r.status || 'errore di rete'));
+    if (r.status !== 204) righe.push('const dati = await risposta.json();', 'console.log(dati);');
+    return righe.join('\n');
+  }
+  function disegnaRisposta() {
+    var v = $('#vista-risp');
+    if (!ultima) return;
+    var r = ultima;
+    if (schedaRisp === 'body') {
+      if (r.status === 0) v.innerHTML = '<div class="vuoto"><strong>Nessuna risposta dal server.</strong> fetch() ha lanciato l\'errore <code>' + esc(r.errore) + '</code>: la rete non è raggiungibile. Non c\'è uno status code perché la richiesta non è mai arrivata.</div>';
+      else if (!r.testo) v.innerHTML = '<div class="vuoto">Risposta senza body (status ' + r.status + ').</div>';
+      else v.innerHTML = '<pre class="codice">' + jsonHtml(r.dati ? JSON.stringify(r.dati, null, 2) : r.testo) + '</pre>';
+    } else if (schedaRisp === 'header') {
+      var rich = Object.keys(r.headers).map(function (k) { return '<tr><td class="mono">' + esc(k) + '</td><td class="mono" style="overflow-wrap:anywhere">' + esc(k === 'Authorization' ? r.headers[k].slice(0, 30) + '…' : r.headers[k]) + '</td></tr>'; }).join('');
+      var risp = r.h ? Object.keys(r.h).map(function (k) { return '<tr><td class="mono">' + esc(k) + '</td><td class="mono" style="overflow-wrap:anywhere">' + esc(r.h[k]) + '</td></tr>'; }).join('') : '';
+      v.innerHTML = '<div style="overflow-x:auto"><table class="tabella"><tr><th colspan="2">Inviati con la richiesta</th></tr>' + (rich || '<tr><td colspan="2">nessuno</td></tr>') +
+        '<tr><th colspan="2" style="padding-top:16px">Ricevuti con la risposta</th></tr>' + (risp || '<tr><td colspan="2">nessuno</td></tr>') + '</table></div>';
+    } else {
+      v.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span class="suggerimento">La stessa richiesta scritta in JavaScript. Funziona in qualsiasi pagina che include <code>nave.js</code>.</span><button class="btn-sec" id="copia">Copia</button></div><pre class="codice" id="cod">' + esc(codiceFetch(r)) + '</pre>';
+      $('#copia').addEventListener('click', function () {
+        var t = $('#cod').textContent, b = this;
+        (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { b.textContent = 'Copiato'; }, function () {
+          var sel = getSelection(), rg = document.createRange(); rg.selectNodeContents($('#cod')); sel.removeAllRanges(); sel.addRange(rg); b.textContent = 'Selezionato: Ctrl+C';
+        });
+      });
+    }
+  }
+
+  // ── Missioni
+  var I = Nave.interno;
+  function num(s) { return parseFloat(String(s).replace(',', '.').replace(/[^\d.\-]/g, '')); }
+  function norm(s) { return String(s).trim().toUpperCase().replace(/^"|"$/g, ''); }
+  var MISSIONI = [
+    { id: 'm1', g: 1, pt: 10, tit: 'Bussare alla porta',
+      testo: 'Sei appena salito a bordo come operatore della <strong>Nave Azzurra</strong>. Prima di tutto chiedi al server la lista delle navi: <code>GET /ships</code>. Non hai ancora fatto il login.',
+      dom: 'Quale status code ti risponde il server?',
+      aiuto: 'Il numero di tre cifre in alto nel pannello Risposta. Quelli che iniziano per 4 dicono che il problema è nella richiesta del client.',
+      ok: function (r) { return num(r) === 401; },
+      dopo: '401 Unauthorized: il server non sa chi sei. Leggi il campo <code>error.message</code>: ti dice anche come rimediare.' },
+    { id: 'm2', g: 1, pt: 10, tit: 'Salire a bordo',
+      testo: 'Fai il login con <code>POST /auth/login</code>. Nel body JSON servono <code>email</code> e <code>password</code>. Le tue credenziali: <code>mario.rossi@nave.it</code> / <code>Timone2026!</code>',
+      dom: 'Per quanti secondi è valido l\'access token che ricevi?',
+      aiuto: 'Cambia il metodo in POST, scrivi il percorso /auth/login e compila il body. Nella risposta cerca il campo expires_in.',
+      ok: function (r) { return num(r) === 900; },
+      dopo: '15 minuti. La console ha salvato il token e lo aggiunge da sola all\'header <code>Authorization</code>. Un\'app vera fa la stessa cosa.' },
+    { id: 'm3', g: 1, pt: 10, tit: 'Documenti di bordo',
+      testo: 'Ora che sei autenticato, ripeti <code>GET /ships</code>.',
+      dom: 'Qual è il codice IMO della tua nave?',
+      aiuto: 'È un campo dell\'oggetto nave dentro l\'array data.',
+      ok: function (r) { return String(r).replace(/\D/g, '') === '9384710'; },
+      dopo: 'Il codice IMO identifica una nave per tutta la vita, anche se cambia nome. L\'ultima cifra è di controllo: 9×7 + 3×6 + 8×5 + 4×4 + 7×3 + 1×2 = 160, e l\'ultima cifra di 160 è 0.' },
+    { id: 'm4', g: 1, pt: 15, tit: 'Inventario',
+      testo: 'I sensori di una nave stanno in <code>/ships/{shipId}/sensors</code>. L\'id della tua nave l\'hai visto nella missione precedente. Non tutti i sensori sono in monitoraggio: esiste un <em>query parameter</em> per filtrare solo quelli attivi.',
+      dom: 'Quanti sensori ATTIVI ha la Nave Azzurra?',
+      aiuto: 'I query parameter si scrivono dopo il punto interrogativo: /ships/NA00001/sensors?active=true. Guarda il campo total.',
+      ok: function (r) { return num(r) === I.sensori('NA00001').filter(function (s) { return s.attivo; }).length; },
+      dopo: 'Il filtro lo applica il server: l\'app riceve solo quello che le serve, e i dati da trasferire sono meno.' },
+    { id: 'm5', g: 1, pt: 15, tit: 'Solo le temperature',
+      testo: 'Il capo macchina vuole controllare solo le temperature. Usa il parametro <code>type</code>. I valori ammessi li trovi nella scheda Endpoint, oppure facendo apposta una richiesta sbagliata.',
+      dom: 'Quanti sensori di tipo temperatura ci sono a bordo?',
+      aiuto: 'type=temperatura. Prova anche type=Temperatura con la T maiuscola e guarda lo status code.',
+      ok: function (r) { return num(r) === I.sensori('NA00001').filter(function (s) { return s.tipo_nome === 'temperatura'; }).length; },
+      dopo: 'Con un valore non ammesso il server risponde 400 Bad Request e in <code>error.details</code> elenca i valori validi.' },
+    { id: 'm6', g: 1, pt: 15, tit: 'Il sensore fantasma',
+      testo: 'Un collega giura che a bordo c\'è un sensore numero 999. Chiedilo al server: <code>GET /ships/NA00001/sensors/999</code>.',
+      dom: 'Quale codice di errore (campo error.code) restituisce il server?',
+      aiuto: 'Il body di ogni errore ha la stessa forma: { "error": { "code": ..., "message": ... } }.',
+      ok: function (r) { return norm(r) === 'SENSOR_NOT_FOUND'; },
+      dopo: 'Lo status 404 dice che cosa è successo. Il <code>code</code> serve al programma per decidere che cosa fare, il <code>message</code> serve alla persona che legge.' },
+    { id: 'm7', g: 1, pt: 20, tit: 'Lettura dal vivo',
+      testo: 'La batteria di emergenza alimenta il ponte di comando se manca la corrente. Trova il suo id nella lista dei sensori, poi chiedi la lettura più recente. Ce n\'è una nuova ogni 10 secondi.',
+      dom: 'Quanti volt segna adesso la batteria di emergenza?',
+      aiuto: 'L\'endpoint è /ships/NA00001/sensors/{sensorId}/readings/latest. Funziona anche il dettaglio del sensore, che contiene ultima_lettura.',
+      ok: function (r) { var v = num(r); return I.valoriRecenti(3, 120).some(function (x) { return Math.abs(x - v) <= 0.011; }); },
+      dopo: 'Nota il campo <code>timestamp</code>: è in UTC (la Z finale). Sulle navi si usa l\'ora UTC per non confondersi tra fusi orari.' },
+    { id: 'm8', g: 1, pt: 20, tit: 'Febbre in sala macchine',
+      testo: 'Il motore principale ha avuto qualche picco. Per i grafici l\'API offre le letture aggregate: media, minimo e massimo per intervallo di tempo.',
+      dom: 'Qual è stata la temperatura MASSIMA del motore principale nelle ultime 24 ore (°C)?',
+      aiuto: 'GET /ships/NA00001/sensors/{id}/readings/aggregate?interval=1h restituisce 24 righe, una per ora. Cerca il valore più alto tra i "massimo".',
+      ok: function (r) { var v = num(r); return Math.abs(v - I.massimo(6, 86400 + 3600)) <= 0.3 || Math.abs(v - I.massimo(6, 86400)) <= 0.3; },
+      dopo: 'Con 24 righe invece di 8.640 letture il trasferimento è circa 300 volte più piccolo. Per un grafico sul telefono è quello che serve.' },
+    { id: 'm9', g: 1, pt: 20, tit: 'Allarmi a bordo',
+      testo: 'Gli allarmi della nave sono in <code>/ships/{shipId}/alarms</code>. Possono essere APERTO, RISOLTO o CHIUSO.',
+      dom: 'Quanti allarmi sono APERTI in questo momento?',
+      aiuto: 'Filtra con status=APERTO e leggi pagination.total_items. Non contarli a mano: potrebbero non stare tutti in una pagina.',
+      ok: function (r) { var n = I.allarmi('NA00001').filter(function (a) { return a.stato === 'APERTO'; }).length; return Math.abs(num(r) - n) <= 1; },
+      dopo: 'Sono tanti, e quasi nessuno li guarda. Gli allarmi ignorati sono un problema serio a bordo (si chiama <em>alarm fatigue</em>). Mercoledì vedremo come gestirli.' },
+    { id: 'm10', g: 1, pt: 25, tit: 'Il più grave',
+      testo: 'Il comandante vuole sapere qual è l\'allarme critico più recente ancora aperto. Puoi combinare più filtri nella stessa richiesta.',
+      dom: 'Qual è l\'id_allarme dell\'allarme CRITICO aperto più recente?',
+      aiuto: 'I parametri si concatenano con &: ?status=APERTO&type=CRITICO. La lista è già ordinata dal più recente.',
+      ok: function (r) { var c = I.allarmi('NA00001').filter(function (a) { return a.stato === 'APERTO' && a.tipo === 'CRITICO'; }).slice(0, 2); return c.some(function (a) { return a.id_allarme === num(r); }); },
+      dopo: 'Prova <code>GET /alarms/{id}</code> con quell\'id: c\'è anche lo storico degli stati dell\'allarme.' },
+
+    { id: 'm11', g: 2, pt: 10, tit: 'Chi sono?',
+      testo: 'Il server sa chi sei grazie al token. Chiedigli il tuo profilo: <code>GET /auth/me</code>.',
+      dom: 'Che ruolo ha Mario Rossi?',
+      aiuto: 'Guarda il campo ruolo. Se ricevi 401, il token è scaduto: rifai il login.',
+      ok: function (r) { return norm(r) === 'OPERATORE'; },
+      dopo: 'Il ruolo decide che cosa puoi fare. Autenticazione significa sapere chi sei, autorizzazione significa sapere che cosa puoi fare.' },
+    { id: 'm12', g: 2, pt: 15, tit: 'Permesso negato',
+      testo: 'Il motore principale va in allarme troppo spesso. Prova ad alzare la soglia massima a 98 °C con <code>PATCH /ships/NA00001/sensors/6</code> e body <code>{ "soglia_max": 98 }</code>, sempre come Mario.',
+      dom: 'Quale status code ricevi?',
+      aiuto: 'Il token è valido, quindi non è un 401.',
+      ok: function (r) { return num(r) === 403; },
+      dopo: '403 Forbidden: il server sa chi sei, ma il tuo ruolo non ti permette di farlo.' },
+    { id: 'm13', g: 2, pt: 25, tit: 'Il capo macchina',
+      testo: 'Giulia Bianchi è il capo macchina. Ti ha dato le sue credenziali per questa manovra: <code>giulia.bianchi@nave.it</code> / <code>Ancora#88</code>. Entra come Giulia e porta la soglia massima del motore principale a <strong>98 °C</strong>.',
+      dom: 'Fatto? Scrivi il valore di soglia_max che ti restituisce il server.',
+      aiuto: 'Prima POST /auth/login con le credenziali di Giulia, poi la stessa PATCH di prima.',
+      ok: function (r) { return num(r) === 98 && I.soglie(6).max === 98; },
+      dopo: 'PATCH modifica solo i campi che mandi. Con PUT dovresti mandare l\'oggetto intero.' },
+    { id: 'm14', g: 2, pt: 15, tit: 'Dati impossibili',
+      testo: 'Prova a impostare una soglia minima più alta della massima, ad esempio <code>{ "soglia_min": 120 }</code> sullo stesso sensore.',
+      dom: 'Quale error.code restituisce il server?',
+      aiuto: 'È un 422: la sintassi JSON è giusta, ma il contenuto non ha senso.',
+      ok: function (r) { return norm(r) === 'THRESHOLD_ORDER'; },
+      dopo: 'Il server controlla sempre i dati, anche se l\'app li ha già controllati. Il client non è affidabile: chiunque può mandare richieste senza passare dall\'app.' },
+    { id: 'm15', g: 2, pt: 15, tit: 'Il formato conta',
+      testo: 'Ripeti una PATCH valida, ma togli la spunta all\'header <code>Content-Type</code>.',
+      dom: 'Quale status code ricevi?',
+      aiuto: 'Senza quell\'header il server non sa in che formato è il body.',
+      ok: function (r) { return num(r) === 415; },
+      dopo: 'È l\'errore più comune quando si scrive fetch() a mano. Tienilo a mente per le prossime lezioni.' },
+    { id: 'm16', g: 2, pt: 20, tit: 'Presa in carico',
+      testo: 'Scegli un allarme APERTO e prendilo in carico: <code>PATCH /alarms/{id}</code> con stato <code>RISOLTO</code> e una nota in <code>note_risoluzione</code>.',
+      dom: 'Scrivi l\'id dell\'allarme che hai preso in carico.',
+      aiuto: 'Body di esempio: { "stato": "RISOLTO", "note_risoluzione": "Controllato il quadro, tutto ok" }',
+      ok: function (r) { var a = I.azioniAllarmi()[num(r)]; return !!(a && a.note); },
+      dopo: 'Se la condizione è già rientrata, il server chiude l\'allarme da solo: guarda lo storico_stati nella risposta.' },
+    { id: 'm17', g: 2, pt: 15, tit: 'Una pagina alla volta',
+      testo: 'Chiedi TUTTI gli allarmi delle ultime 24 ore, ma 10 per pagina.',
+      dom: 'Quante pagine servono per vederli tutti?',
+      aiuto: 'Il parametro limit decide quanti elementi per pagina. Guarda pagination.total_pages.',
+      ok: function (r) { var n = Math.ceil(I.allarmi('NA00001').length / 10); return Math.abs(num(r) - n) <= 1; },
+      dopo: 'Per la pagina successiva usi page=2. Il campo has_next dice all\'app se mostrare il pulsante "carica altri".' },
+    { id: 'm18', g: 2, pt: 15, tit: 'Dentro il token',
+      testo: 'Apri la scheda <strong>Token</strong>. Un JWT è fatto di tre parti separate da punti: header, payload e firma. Le prime due sono solo codificate in Base64: chiunque può leggerle.',
+      dom: 'Quale campo del payload indica quando scade il token?',
+      aiuto: 'È un numero: i secondi trascorsi dal 1° gennaio 1970 (timestamp Unix).',
+      ok: function (r) { return norm(r).replace(/"/g, '') === 'EXP'; },
+      dopo: 'Mai mettere dati riservati nel payload di un JWT: si legge senza bisogno di chiavi. La firma non nasconde il contenuto, impedisce solo di modificarlo.' },
+    { id: 'm19', g: 2, pt: 20, tit: 'Già chiuso',
+      testo: 'Trova un allarme già CHIUSO e prova a chiuderlo di nuovo.',
+      dom: 'Quale status code ricevi?',
+      aiuto: 'Filtra con status=CHIUSO, poi PATCH /alarms/{id} con { "stato": "CHIUSO" }.',
+      ok: function (r) { return num(r) === 409; },
+      dopo: '409 Conflict: la richiesta è valida, ma è in conflitto con lo stato attuale della risorsa.' },
+    { id: 'm20', g: 2, pt: 20, tit: 'Fine turno',
+      testo: 'Esci con <code>POST /auth/logout</code>, poi riprova <code>GET /auth/me</code> con lo stesso token.',
+      dom: 'Quale error.code ricevi dopo il logout?',
+      aiuto: 'La console tiene ancora il token, ma il server lo ha messo nella lista dei token revocati.',
+      ok: function (r) { return norm(r) === 'TOKEN_REVOKED'; },
+      dopo: 'Il logout vero avviene sul server: cancellare il token solo dall\'app non basta, perché chi l\'ha copiato potrebbe ancora usarlo.' }
+  ];
+  var GIORNATE = { 1: { tit: 'Giornata 1 · Lunedì 26 ottobre', codice: null }, 2: { tit: 'Giornata 2 · Mercoledì 28 ottobre', codice: 'ROTTA' } };
+  var aperte = {};
+
+  function punteggio() {
+    var p = 0;
+    MISSIONI.forEach(function (m) { if (mem.fatte[m.id]) p += m.pt - (mem.aiuti[m.id] ? 5 : 0); });
+    $('#punti').textContent = p;
+  }
+
+  function disegnaMissioni(v) {
+    var h = '<div class="missioni">';
+    [1, 2].forEach(function (g) {
+      var lista = MISSIONI.filter(function (m) { return m.g === g; });
+      var fatte = lista.filter(function (m) { return mem.fatte[m.id]; }).length;
+      h += '<div class="giornata"><h3>' + GIORNATE[g].tit + '</h3><span class="etichetta">' + fatte + ' / ' + lista.length + '</span></div>';
+      if (GIORNATE[g].codice && !mem.sbloccati[g]) {
+        h += '<form class="sblocco" data-g="' + g + '"><span>Missioni bloccate. Il docente vi darà il codice.</span><input id="cod-' + g + '" aria-label="Codice di sblocco" autocomplete="off"><button class="btn-sec">Sblocca</button></form>';
+        return;
+      }
+      lista.forEach(function (m, i) {
+        var f = mem.fatte[m.id];
+        var n = MISSIONI.indexOf(m) + 1;
+        h += '<details class="missione' + (f ? ' fatta' : '') + '" data-id="' + m.id + '"' + (aperte[m.id] ? ' open' : '') + '>' +
+          '<summary><span class="num">' + (f ? '✓' : n) + '</span><span class="tit">' + m.tit + '</span><span class="pt">' + (f ? '+' + (m.pt - (mem.aiuti[m.id] ? 5 : 0)) : m.pt) + ' pt</span></summary>' +
+          '<div class="dentro"><p>' + m.testo + '</p><p class="domanda">' + m.dom + '</p>' +
+          (f ? '<div class="esito-m si">Risposta corretta: ' + esc(f) + '. ' + m.dopo + '</div>' :
+            '<form class="risposta" data-id="' + m.id + '"><input id="r-' + m.id + '" aria-label="Risposta" autocomplete="off"><button>Verifica</button></form><div class="esito-m" id="e-' + m.id + '" hidden></div>' +
+            (mem.aiuti[m.id] ? '<div class="aiuto">' + m.aiuto + '</div>' : '<button class="link" data-aiuto="' + m.id + '">Mostra un aiuto (costa 5 punti)</button>')) +
+          '</div></details>';
+      });
+    });
+    h += '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:8px"><button class="btn-sec" id="azzera">Azzera punteggio e nave</button></div><div id="conferma-azzera" hidden class="sblocco"><span>Si cancellano missioni, cronologia, token e modifiche alla nave.</span><button class="btn-sec" id="azzera-si">Sì, azzera</button><button class="btn-sec" id="azzera-no">Annulla</button></div></div>';
+    v.innerHTML = h;
+    v.querySelectorAll('details.missione').forEach(function (d) { d.addEventListener('toggle', function () { aperte[d.dataset.id] = d.open; }); });
+    v.querySelectorAll('form.risposta').forEach(function (f) {
+      f.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var m = MISSIONI.filter(function (x) { return x.id === f.dataset.id; })[0];
+        var val = $('#r-' + m.id).value.trim(); if (!val) return;
+        var es = $('#e-' + m.id); es.hidden = false;
+        var giusto = false; try { giusto = m.ok(val); } catch (er) {}
+        if (giusto) { mem.fatte[m.id] = val; scrivi(); punteggio(); aperte[m.id] = true; disegnaLato(); }
+        else { es.className = 'esito-m no'; es.textContent = 'Non è la risposta giusta. Controlla la risposta del server e riprova.'; }
+      });
+    });
+    v.querySelectorAll('[data-aiuto]').forEach(function (b) { b.addEventListener('click', function () { mem.aiuti[b.dataset.aiuto] = true; scrivi(); disegnaLato(); }); });
+    v.querySelectorAll('form.sblocco').forEach(function (f) {
+      f.addEventListener('submit', function (e) {
+        e.preventDefault(); var g = f.dataset.g;
+        if ($('#cod-' + g).value.trim().toUpperCase() === GIORNATE[g].codice) { mem.sbloccati[g] = true; scrivi(); disegnaLato(); }
+        else $('#cod-' + g).value = '';
+      });
+    });
+    $('#azzera').addEventListener('click', function () { $('#conferma-azzera').hidden = false; });
+    $('#azzera-no').addEventListener('click', function () { $('#conferma-azzera').hidden = true; });
+    $('#azzera-si').addEventListener('click', function () {
+      var sq = mem.squadra; mem = { fatte: {}, aiuti: {}, cron: [], sbloccati: {}, squadra: sq }; scrivi(); Nave.reset();
+      aggiornaHeaderToken(); punteggio(); $('#n-cron').textContent = '0'; disegnaLato();
+    });
+  }
+
+  // ── Endpoint
+  var ENDPOINT = [
+    ['Autenticazione', [
+      ['POST', '/auth/login', 'Login: restituisce access_token e refresh_token', '{\n  "email": "",\n  "password": ""\n}'],
+      ['POST', '/auth/refresh', 'Nuovo access token a partire dal refresh token', 'refresh'],
+      ['POST', '/auth/logout', 'Revoca il token corrente'],
+      ['GET', '/auth/me', 'Profilo dell\'operatore autenticato']]],
+    ['Navi', [
+      ['GET', '/ships', 'Navi accessibili all\'operatore'],
+      ['GET', '/ships/{shipId}', 'Dettaglio nave con elenco sensori e stato'],
+      ['GET', '/ships/{shipId}/dashboard', 'Ultimo valore di tutti i sensori (schermata Dashboard)']]],
+    ['Sensori', [
+      ['GET', '/ships/{shipId}/sensors', 'Lista sensori · query: active, type'],
+      ['GET', '/ships/{shipId}/sensors/{sensorId}', 'Dettaglio sensore con ultima lettura e stato'],
+      ['PATCH', '/ships/{shipId}/sensors/{sensorId}', 'Modifica nome, posizione, soglie, attivo', '{\n  "soglia_max": 98\n}']]],
+    ['Letture', [
+      ['GET', '/ships/{shipId}/sensors/{sensorId}/readings/latest', 'Lettura più recente'],
+      ['GET', '/ships/{shipId}/sensors/{sensorId}/readings', 'Letture grezze, paginate · query: since, until, page, limit'],
+      ['GET', '/ships/{shipId}/sensors/{sensorId}/readings/aggregate', 'Media, minimo, massimo · query: interval (5m, 15m, 1h, 6h, 1d), since, until']]],
+    ['Allarmi', [
+      ['GET', '/ships/{shipId}/alarms', 'Lista paginata · query: status, type, sensor_id, since, page, limit'],
+      ['GET', '/alarms/{alarmId}', 'Dettaglio allarme con storico degli stati'],
+      ['PATCH', '/alarms/{alarmId}', 'Presa in carico o chiusura', '{\n  "stato": "RISOLTO",\n  "note_risoluzione": ""\n}']]]
+  ];
+  function disegnaEndpoint(v) {
+    var h = '<p class="suggerimento" style="margin:0">Base URL: <code>' + Nave.BASE_URL + '</code>. Tocca un endpoint per copiarlo nella richiesta, poi sostituisci i parametri tra graffe.</p>';
+    ENDPOINT.forEach(function (gr) {
+      h += '<div class="ep-gruppo"><span class="etichetta">' + gr[0] + '</span>';
+      gr[1].forEach(function (e, i) {
+        h += '<button class="ep" data-m="' + e[0] + '" data-p="' + e[1] + '" data-b="' + (e[3] ? esc(e[3]) : '') + '"><span class="m m-' + e[0] + '">' + e[0] + '</span><span class="p">' + e[1] + '</span><span class="d">' + e[2] + '</span></button>';
+      });
+      h += '</div>';
+    });
+    h += '<div class="ep-gruppo"><span class="etichetta">Status code usati da questo server</span><div style="overflow-x:auto"><table class="tabella">' +
+      [['200', 'OK'], ['204', 'OK, nessun contenuto (logout)'], ['400', 'Richiesta malformata: parametro o JSON non valido'], ['401', 'Non autenticato: token mancante, scaduto o falso'], ['403', 'Autenticato, ma senza permesso'], ['404', 'Risorsa o endpoint inesistente'], ['405', 'Metodo non ammesso su questo endpoint'], ['409', 'Conflitto con lo stato della risorsa'], ['415', 'Body non in formato JSON (manca Content-Type)'], ['422', 'JSON corretto ma dati non validi'], ['429', 'Troppe richieste in poco tempo']]
+        .map(function (r) { return '<tr><td class="mono">' + r[0] + '</td><td>' + r[1] + '</td></tr>'; }).join('') + '</table></div></div>';
+    v.innerHTML = h;
+    v.querySelectorAll('.ep').forEach(function (b) {
+      b.addEventListener('click', function () {
+        $('#metodo').value = b.dataset.m; $('#path').value = b.dataset.p.replace('{shipId}', 'NA00001');
+        if (b.dataset.b) $('#body').value = b.dataset.b === 'refresh' ? JSON.stringify({ refresh_token: mem.refresh || '' }, null, 2) : b.dataset.b;
+        aggiornaBody(); $('#path').focus();
+        var p = $('#path'), i = p.value.indexOf('{'); if (i >= 0) p.setSelectionRange(i, p.value.indexOf('}', i) + 1);
+      });
+    });
+  }
+
+  // ── Token
+  function disegnaToken(v) {
+    if (!mem.token) { v.innerHTML = '<div class="vuoto">Nessun token. Fai il login con <code>POST /auth/login</code>: la console salverà qui il token ricevuto.</div>'; return; }
+    var p = mem.token.split('.'), d = Nave.decodificaToken(mem.token);
+    var resto = d ? d.payload.exp - Date.now() / 1000 : 0;
+    v.innerHTML = '<span class="etichetta">Access token</span><div class="jwt"><span class="a">' + esc(p[0]) + '</span>.<span class="b">' + esc(p[1]) + '</span>.<span class="c">' + esc(p[2]) + '</span></div>' +
+      '<div class="scadenza" id="scad"></div>' +
+      '<span class="etichetta">Header (parte rossa, decodificata)</span><pre class="codice">' + jsonHtml(JSON.stringify(d.header, null, 2)) + '</pre>' +
+      '<span class="etichetta">Payload (parte viola, decodificata)</span><pre class="codice">' + jsonHtml(JSON.stringify(d.payload, null, 2)) + '</pre>' +
+      '<p class="suggerimento" style="margin:0">La parte blu è la firma: il server la calcola con una chiave segreta. Se cambi anche un solo carattere del payload, la firma non corrisponde più e il server risponde 401.</p>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn-sec" id="dimentica">Dimentica il token</button></div>';
+    function tick() { var e = $('#scad'); if (!e) return; var s = Math.round(d.payload.exp - Date.now() / 1000); e.textContent = s > 0 ? 'Scade tra ' + Math.floor(s / 60) + ' min ' + String(s % 60).padStart(2, '0') + ' s (exp: ' + d.payload.exp + ')' : 'Scaduto (exp: ' + d.payload.exp + '): il server risponderà 401 TOKEN_EXPIRED'; }
+    tick(); clearInterval(window.__tickTok); window.__tickTok = setInterval(tick, 1000);
+    $('#dimentica').addEventListener('click', function () { mem.token = null; mem.refresh = null; scrivi(); aggiornaHeaderToken(); disegnaLato(); });
+  }
+
+  // ── Cronologia
+  function disegnaCronologia(v) {
+    if (!mem.cron.length) { v.innerHTML = '<div class="vuoto">Le richieste inviate compariranno qui. Toccane una per ricaricarla.</div>'; return; }
+    v.innerHTML = '<div class="cron">' + mem.cron.map(function (c, i) {
+      var cl = 's' + String(c.status).charAt(0) + ' s' + c.status;
+      return '<button data-i="' + i + '"><span class="t">' + c.ora + '</span><span class="m m-' + c.metodo + '">' + c.metodo + '</span><span class="p">' + esc(c.path) + '</span><span class="mini ' + cl + '">' + (c.status || 'rete') + '</span></button>';
+    }).join('') + '</div>';
+    v.querySelectorAll('.cron button').forEach(function (b) {
+      b.addEventListener('click', function () { var c = mem.cron[b.dataset.i]; $('#metodo').value = c.metodo; $('#path').value = c.path; if (c.body) $('#body').value = c.body; aggiornaBody(); });
+    });
+  }
+
+  var schedaLato = 'missioni';
+  schede('#schede-lato', function (v) { schedaLato = v; disegnaLato(); });
+  function disegnaLato() {
+    var v = $('#vista-lato');
+    if (schedaLato !== 'token') clearInterval(window.__tickTok);
+    ({ missioni: disegnaMissioni, endpoint: disegnaEndpoint, token: disegnaToken, cronologia: disegnaCronologia })[schedaLato](v);
+  }
+
+  // ── Plancia (vista docente)
+  var timerPlancia = null;
+  function disegnaPlancia() {
+    var s = I.sensori('NA00001');
+    var al = I.allarmi('NA00001').filter(function (a) { return a.stato === 'APERTO'; });
+    var crit = al.filter(function (a) { return a.tipo === 'CRITICO'; }).length;
+    var h = '<div class="plancia-testa"><h2>Nave Azzurra</h2><span class="etichetta">Plancia · aggiornamento ogni 2 s · ora UTC <span class="mono" style="letter-spacing:0">' + new Date().toISOString().slice(11, 19) + '</span></span>' +
+      '<span class="chip ' + (crit ? 'CRITICO' : al.length ? 'AVVISO' : 'OK') + '">' + al.length + ' allarmi aperti · ' + crit + ' critici</span></div><div class="strumenti-griglia">';
+    s.forEach(function (x) {
+      var lo = x.soglia_min, hi = x.soglia_max;
+      var span = (hi !== null && lo !== null) ? hi - lo : Math.abs(lo !== null ? lo : hi) || 10;
+      var smin = (lo !== null ? lo : hi - span) - span * 0.35, smax = (hi !== null ? hi : lo + span * 6) + span * 0.35;
+      if (hi === null) smax = Math.max(100, smax);
+      var pos = function (val) { return Math.max(0, Math.min(100, (val - smin) / (smax - smin) * 100)); };
+      var okL = lo !== null ? pos(lo) : 0, okR = hi !== null ? pos(hi) : 100;
+      h += '<div class="gauge ' + x.stato + '"><div class="nome">' + esc(x.nome) + '</div>' +
+        '<div class="lettura">' + (x.attivo ? x.valore : '—') + '<small>' + x.unita_misura + '</small></div>' +
+        '<div class="scala"><div class="ok" style="left:' + okL + '%;width:' + (okR - okL) + '%"></div>' + (x.attivo ? '<div class="ago" style="left:' + pos(x.valore) + '%"></div>' : '') + '</div>' +
+        '<div class="scala-et"><span>' + (lo !== null ? 'min ' + lo : '') + '</span><span>' + (hi !== null ? 'max ' + hi : '') + '</span></div>' +
+        '<span class="chip ' + x.stato + '">' + x.stato + '</span></div>';
+    });
+    h += '</div>';
+    $('#plancia').innerHTML = h;
+  }
+  function vista() {
+    var pl = location.hash === '#plancia';
+    $('#plancia').hidden = !pl; $('#console').hidden = pl;
+    $('#link-vista').textContent = pl ? 'Torna alla console' : 'Vista plancia (docente)';
+    $('#link-vista').setAttribute('href', pl ? '#console' : '#plancia');
+    clearInterval(timerPlancia);
+    if (pl) { disegnaPlancia(); timerPlancia = setInterval(disegnaPlancia, 2000); }
+  }
+  window.addEventListener('hashchange', vista);
+
+  // ── Avvio
+  $('#usa-token').checked = !!(mem.token && mem.usaToken !== false);
+  aggiornaHeaderToken(); aggiornaBody(); punteggio();
+  $('#n-cron').textContent = mem.cron.length;
+  disegnaLato(); vista();
+})();
+</script>
+
+</body>
+</html>
