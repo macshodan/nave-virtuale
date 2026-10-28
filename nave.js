@@ -151,16 +151,21 @@
       posizione: mod.posizione !== undefined ? mod.posizione : s.posizione,
       soglia_min: soglie.min,
       soglia_max: soglie.max,
+      ritardo_allarme_s: soglie.ritardo,
+      isteresi: soglie.isteresi,
       attivo: mod.attivo !== undefined ? mod.attivo : s.attivo,
       data_installazione: s.data_installazione
     };
   }
 
-  // Soglie valide in un certo istante (lo storico serve a non "riscrivere" gli allarmi passati)
+  // Regole di allarme valide in un certo istante (lo storico serve a non "riscrivere" gli allarmi passati)
+  //   min / max  soglie
+  //   ritardo    secondi in cui il valore deve restare fuori soglia prima che scatti l'allarme
+  //   isteresi   margine di rientro: l'allarme rientra solo quando il valore torna dentro di almeno questa quantità
   function sogliaAl(s, t) {
-    var r = { min: s.soglia_min, max: s.soglia_max };
+    var r = { min: s.soglia_min, max: s.soglia_max, ritardo: 0, isteresi: 0 };
     var st = stato.soglie[s.id_sensore] || [];
-    for (var i = 0; i < st.length; i++) if (st[i].da <= t) r = { min: st[i].min, max: st[i].max };
+    for (var i = 0; i < st.length; i++) if (st[i].da <= t) r = { min: st[i].min, max: st[i].max, ritardo: st[i].ritardo || 0, isteresi: st[i].isteresi || 0 };
     return r;
   }
 
@@ -204,6 +209,37 @@
     return Math.max(Math.abs(sog.min !== null ? sog.min : sog.max) , 1) * 0.5;
   }
 
+  // Episodi in cui un sensore è fuori soglia tra "inizio" e "fine".
+  // regoleAl(t) restituisce le regole valide all'istante t (soglie, ritardo, isteresi).
+  function episodi(s, inizio, fine, regoleAl) {
+    var out = [], ep = null;
+    for (var t = inizio; t <= fine; t += PASSO) {
+      var r = regoleAl(t), v = valoreAl(s, t);
+      var sv = statoValore(v, r, ampiezzaRange(r, s));
+      var fuori = !!sv.lato;
+      if (ep && !fuori && r.isteresi) {
+        var rientro = { min: r.min !== null ? r.min + r.isteresi : null, max: r.max !== null ? r.max - r.isteresi : null };
+        if (statoValore(v, rientro, 1).lato) fuori = true;
+      }
+      if (fuori) {
+        if (!ep) ep = { s: s, inizio: t, lato: sv.lato, peggiore: 'AVVISO', estremo: v, fine: null, regole: r };
+        if (sv.livello === 'CRITICO') ep.peggiore = 'CRITICO';
+        if ((ep.lato === 'MIN' && v < ep.estremo) || (ep.lato === 'MAX' && v > ep.estremo)) ep.estremo = v;
+      } else if (ep) { ep.fine = t; out.push(ep); ep = null; }
+    }
+    if (ep) out.push(ep);
+    // Ritardo: l'allarme scatta solo se la condizione dura più di "ritardo" secondi
+    return out.filter(function (e) {
+      var durata = (e.fine !== null ? e.fine : fine + PASSO) - e.inizio;
+      return durata > (e.regole.ritardo || 0);
+    }).map(function (e) {
+      e.scatto = e.inizio + Math.ceil((e.regole.ritardo || 0) / PASSO) * PASSO;
+      e.valore_trigger = valoreAl(s, e.scatto);
+      e.id_lettura = Math.floor(e.scatto / PASSO) * 100 + s.id_sensore;
+      return e;
+    });
+  }
+
   // ─── ALLARMI: derivati dalle letture e dalle soglie, poi "corretti" dalle azioni degli operatori
   var cacheAllarmi = { chiave: null, lista: [] };
   function calcolaAllarmi() {
@@ -215,17 +251,7 @@
     SENSORI.forEach(function (s) {
       var campi = campiSensore(s);
       if (!campi.attivo) return;
-      var ep = null;
-      for (var t = inizio; t <= fine; t += PASSO) {
-        var sog = sogliaAl(s, t);
-        var v = valoreAl(s, t);
-        var sv = statoValore(v, sog, ampiezzaRange(sog, s));
-        if (sv.lato) {
-          if (!ep) ep = { s: s, inizio: t, valore_trigger: v, lato: sv.lato, peggiore: sv.livello, fine: null, id_lettura: Math.floor(t / PASSO) * 100 + s.id_sensore };
-          else if (sv.livello === 'CRITICO') ep.peggiore = 'CRITICO';
-        } else if (ep) { ep.fine = t; lista.push(ep); ep = null; }
-      }
-      if (ep) lista.push(ep);
+      lista = lista.concat(episodi(s, inizio, fine, function (t) { return sogliaAl(s, t); }));
     });
     var adesso = oraSec();
     lista = lista.map(function (ep) {
@@ -240,13 +266,13 @@
         tipo: ep.peggiore,
         valore_trigger: ep.valore_trigger,
         soglia_violata: ep.lato,
-        timestamp_apertura: iso(ep.inizio),
+        timestamp_apertura: iso(ep.scatto),
         timestamp_chiusura: null,
         stato: 'APERTO',
         condizione_attiva: attiva,
         note_risoluzione: null,
         id_operatore_chiusura: null,
-        storico_stati: [{ stato: 'APERTO', timestamp: iso(ep.inizio), operatore: 'sistema' }]
+        storico_stati: [{ stato: 'APERTO', timestamp: iso(ep.scatto), operatore: 'sistema' }]
       };
       var az = stato.allarmi[id];
       if (az) {
@@ -424,6 +450,13 @@
     if (isNaN(t)) return { r: errore(400, 'INVALID_PARAMETER', 'Il parametro "' + nome + '" deve essere una data ISO 8601, es. 2026-10-26T08:00:00Z.', [{ field: nome, issue: 'valore ricevuto: "' + q[nome] + '"' }]) };
     return { v: t / 1000 };
   }
+  function paramNum(q, nome, def, ammettiNull) {
+    if (q[nome] === undefined || q[nome] === '') return { v: def };
+    if (ammettiNull && /^(null|none)$/i.test(q[nome])) return { v: null };
+    var v = Number(q[nome].replace(',', '.'));
+    if (isNaN(v)) return { r: errore(400, 'INVALID_PARAMETER', 'Il parametro "' + nome + '" deve essere un numero' + (ammettiNull ? ' (oppure null per nessuna soglia)' : '') + '.', [{ field: nome, issue: 'valore ricevuto: "' + q[nome] + '"' }]) };
+    return { v: v };
+  }
   function paramEnum(q, nome, valori) {
     if (q[nome] === undefined) return { v: undefined };
     if (valori.indexOf(q[nome]) < 0) return { r: errore(400, 'INVALID_PARAMETER', 'Valore non valido per "' + nome + '". Valori ammessi: ' + valori.join(', ') + '.', [{ field: nome, issue: 'valore ricevuto: "' + q[nome] + '"' }]) };
@@ -519,13 +552,15 @@
       if (['CAPO_MACCHINA', 'ADMIN'].indexOf(ctx.op.ruolo) < 0) return errore(403, 'FORBIDDEN', 'Il ruolo ' + ctx.op.ruolo + ' non può modificare i sensori. Serve CAPO_MACCHINA o ADMIN.');
       var b = ctx.body;
       if (!b || typeof b !== 'object' || Array.isArray(b)) return errore(400, 'BODY_REQUIRED', 'Serve un body JSON con i campi da modificare.');
-      var ammessi = { nome: 'string', posizione: 'string', soglia_min: 'number', soglia_max: 'number', attivo: 'boolean' };
+      var ammessi = { nome: 'string', posizione: 'string', soglia_min: 'number', soglia_max: 'number', ritardo_allarme_s: 'number', isteresi: 'number', attivo: 'boolean' };
       var dettagli = [];
       Object.keys(b).forEach(function (k) {
         if (!ammessi[k]) dettagli.push({ field: k, issue: 'campo non modificabile. Campi ammessi: ' + Object.keys(ammessi).join(', ') });
         else if (b[k] === null && (k === 'soglia_min' || k === 'soglia_max' || k === 'posizione')) { /* null ammesso */ }
         else if (typeof b[k] !== ammessi[k]) dettagli.push({ field: k, issue: 'atteso ' + ammessi[k] + ', ricevuto ' + (b[k] === null ? 'null' : typeof b[k]) });
         else if (k === 'nome' && (!b[k].trim() || b[k].length > 100)) dettagli.push({ field: k, issue: 'deve avere tra 1 e 100 caratteri' });
+        else if (k === 'ritardo_allarme_s' && (b[k] < 0 || b[k] > 1800 || Math.round(b[k]) !== b[k])) dettagli.push({ field: k, issue: 'secondi interi tra 0 e 1800' });
+        else if (k === 'isteresi' && b[k] < 0) dettagli.push({ field: k, issue: 'non può essere negativa' });
       });
       if (!Object.keys(b).length) return errore(400, 'BODY_EMPTY', 'Il body è vuoto: indica almeno un campo da modificare.');
       if (dettagli.length) return errore(422, 'VALIDATION_ERROR', 'Alcuni campi non sono validi.', dettagli);
@@ -533,8 +568,11 @@
       var nmin = b.soglia_min !== undefined ? b.soglia_min : att.min;
       var nmax = b.soglia_max !== undefined ? b.soglia_max : att.max;
       if (nmin !== null && nmax !== null && nmin >= nmax) return errore(422, 'THRESHOLD_ORDER', 'soglia_min (' + nmin + ') deve essere minore di soglia_max (' + nmax + ').', [{ field: 'soglia_min', issue: 'deve essere < soglia_max' }]);
-      if (b.soglia_min !== undefined || b.soglia_max !== undefined) {
-        (stato.soglie[r.s.id_sensore] = stato.soglie[r.s.id_sensore] || []).push({ da: oraSec(), min: nmin, max: nmax, operatore: ctx.op.nome });
+      var nrit = b.ritardo_allarme_s !== undefined ? b.ritardo_allarme_s : att.ritardo;
+      var nist = b.isteresi !== undefined ? b.isteresi : att.isteresi;
+      if (nist && nmin !== null && nmax !== null && nist >= (nmax - nmin) / 2) return errore(422, 'HYSTERESIS_TOO_LARGE', 'L\'isteresi (' + nist + ') deve essere minore di metà dell\'intervallo tra le soglie (' + arrotonda((nmax - nmin) / 2, 3) + ').', [{ field: 'isteresi', issue: 'troppo grande' }]);
+      if (b.soglia_min !== undefined || b.soglia_max !== undefined || b.ritardo_allarme_s !== undefined || b.isteresi !== undefined) {
+        (stato.soglie[r.s.id_sensore] = stato.soglie[r.s.id_sensore] || []).push({ da: oraSec(), min: nmin, max: nmax, ritardo: nrit, isteresi: nist, operatore: ctx.op.nome });
       }
       var mod = stato.sensori[r.s.id_sensore] = stato.sensori[r.s.id_sensore] || {};
       ['nome', 'posizione', 'attivo'].forEach(function (k) { if (b[k] !== undefined) mod[k] = b[k]; });
@@ -588,6 +626,40 @@
         if (n) dati.push({ ora: iso(b0), media: arrotonda(somma / n, r.s.m.dec), minimo: mn, massimo: mx, campioni: n });
       }
       return risposta(200, { sensor_id: r.s.id_sensore, unita_misura: tipoDi(r.s).unita_misura, interval: interval, data: dati });
+    } },
+    { m: 'GET', p: '/ships/{shipId}/sensors/{sensorId}/alarm-preview', h: function (ctx) {
+      // "E se…?": quanti allarmi avrebbe generato questo sensore nelle ultime 24 ore con regole diverse
+      var e = controllaNave(ctx, ctx.params.shipId); if (e) return e;
+      var r = sensoreDellaNave(ctx.params.shipId, ctx.params.sensorId); if (r.r) return r.r;
+      var att = sogliaAl(r.s, Infinity), q = ctx.query;
+      var pmin = paramNum(q, 'soglia_min', att.min, true); if (pmin.r) return pmin.r;
+      var pmax = paramNum(q, 'soglia_max', att.max, true); if (pmax.r) return pmax.r;
+      var prit = paramNum(q, 'ritardo_allarme_s', att.ritardo); if (prit.r) return prit.r;
+      var pist = paramNum(q, 'isteresi', att.isteresi); if (pist.r) return pist.r;
+      if (pmin.v === null && pmax.v === null) return errore(400, 'INVALID_PARAMETER', 'Serve almeno una soglia (soglia_min o soglia_max).');
+      if (pmin.v !== null && pmax.v !== null && pmin.v >= pmax.v) return errore(422, 'THRESHOLD_ORDER', 'soglia_min deve essere minore di soglia_max.');
+      if (prit.v < 0 || prit.v > 1800) return errore(400, 'INVALID_PARAMETER', 'ritardo_allarme_s deve essere tra 0 e 1800.');
+      if (pist.v < 0) return errore(400, 'INVALID_PARAMETER', 'isteresi non può essere negativa.');
+      var fine = ultimoIstante(), inizio = fine - 86400;
+      function riassunto(reg, conEpisodi) {
+        var eps = episodi(r.s, inizio, fine, function () { return reg; });
+        var fuori = 0; eps.forEach(function (x) { fuori += ((x.fine !== null ? x.fine : fine + PASSO) - x.inizio); });
+        var o = { soglia_min: reg.min, soglia_max: reg.max, ritardo_allarme_s: reg.ritardo, isteresi: reg.isteresi,
+          allarmi: eps.length,
+          critici: eps.filter(function (x) { return x.peggiore === 'CRITICO'; }).length,
+          avvisi: eps.filter(function (x) { return x.peggiore === 'AVVISO'; }).length,
+          minuti_in_allarme: Math.round(fuori / 60) };
+        if (conEpisodi) o.episodi = eps.map(function (x) {
+          return { scatto: iso(x.scatto), durata_s: (x.fine !== null ? x.fine : fine + PASSO) - x.inizio, valore_estremo: x.estremo, tipo: x.peggiore };
+        }).reverse();
+        return o;
+      }
+      return risposta(200, {
+        sensor_id: r.s.id_sensore, nome: campiSensore(r.s).nome, unita_misura: tipoDi(r.s).unita_misura,
+        periodo: { since: iso(inizio), until: iso(fine) },
+        impostazioni_attuali: riassunto(att, false),
+        simulazione: riassunto({ min: pmin.v, max: pmax.v, ritardo: prit.v, isteresi: pist.v }, true)
+      });
     } },
     { m: 'GET', p: '/ships/{shipId}/dashboard', h: function (ctx) {
       var e = controllaNave(ctx, ctx.params.shipId); if (e) return e;
@@ -770,7 +842,7 @@
   global.Nave = {
     BASE_URL: BASE_URL,
     config: config,
-    versione: '1.0',
+    versione: '1.1',
     /** Registra una funzione chiamata a ogni richiesta (per log e strumenti) */
     onRichiesta: function (f) { ascoltatori.push(f); return function () { ascoltatori = ascoltatori.filter(function (x) { return x !== f; }); }; },
     /** Decodifica un JWT senza verificarlo (come jwt.io) */
@@ -797,6 +869,11 @@
       },
       allarmi: function (idNave) { return calcolaAllarmi().filter(function (a) { return !idNave || a.id_nave === idNave; }).map(copia); },
       soglie: function (idSensore) { var s = sensoreDi(idSensore); return sogliaAl(s, Infinity); },
+      anteprima: function (idSensore, reg) {
+        var s = sensoreDi(idSensore), fine = ultimoIstante(), att = sogliaAl(s, Infinity);
+        var r = { min: reg.min !== undefined ? reg.min : att.min, max: reg.max !== undefined ? reg.max : att.max, ritardo: reg.ritardo || 0, isteresi: reg.isteresi || 0 };
+        return episodi(s, fine - 86400, fine, function () { return r; }).length;
+      },
       azioniAllarmi: function () { return copia(stato.allarmi); },
       operatori: function () { return OPERATORI.map(function (o) { return { email: o.email, password: o.password, ruolo: o.ruolo, nome: o.nome }; }); }
     }

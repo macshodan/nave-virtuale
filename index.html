@@ -576,7 +576,13 @@ footer.piede { max-width: 1500px; margin: 0 auto; padding-block: 0 var(--s6); pa
       dom: 'Quale error.code ricevi dopo il logout?',
       aiuto: 'La console tiene ancora il token, ma il server lo ha messo nella lista dei token revocati.',
       ok: function (r) { return norm(r) === 'TOKEN_REVOKED'; },
-      dopo: 'Il logout vero avviene sul server: cancellare il token solo dall\'app non basta, perché chi l\'ha copiato potrebbe ancora usarlo.' }
+      dopo: 'Il logout vero avviene sul server: cancellare il token solo dall\'app non basta, perché chi l\'ha copiato potrebbe ancora usarlo.' },
+    { id: 'm21', g: 2, pt: 25, tit: 'E se…?',
+      testo: 'La cella frigorifera della cambusa va in allarme ogni volta che qualcuno apre la porta. Prima di cambiare le regole sulla nave vera, conviene simularle: l\'endpoint <code>alarm-preview</code> calcola quanti allarmi ci sarebbero stati nelle ultime 24 ore con regole diverse, senza modificare niente. Prova ad aggiungere un ritardo: l\'allarme scatta solo se il valore resta fuori soglia per più di N secondi.',
+      dom: 'Con ritardo_allarme_s=120, quanti allarmi avrebbe generato la cella frigorifera nelle ultime 24 ore?',
+      aiuto: 'GET /ships/NA00001/sensors/11/alarm-preview?ritardo_allarme_s=120 e guarda simulazione.allarmi. Il confronto con le regole attuali è in impostazioni_attuali.',
+      ok: function (r) { return Math.abs(num(r) - I.anteprima(11, { ritardo: 120 })) <= 1; },
+      dopo: 'Meno allarmi, ma attenzione: un ritardo troppo lungo nasconde anche i problemi veri. È il tema del laboratorio di oggi.' }
   ];
   var GIORNATE = { 1: { tit: 'Giornata 1 · Lunedì 26 ottobre', codice: null }, 2: { tit: 'Giornata 2 · Mercoledì 28 ottobre', codice: 'ROTTA' } };
   var aperte = {};
@@ -653,7 +659,8 @@ footer.piede { max-width: 1500px; margin: 0 auto; padding-block: 0 var(--s6); pa
     ['Sensori', [
       ['GET', '/ships/{shipId}/sensors', 'Lista sensori · query: active, type'],
       ['GET', '/ships/{shipId}/sensors/{sensorId}', 'Dettaglio sensore con ultima lettura e stato'],
-      ['PATCH', '/ships/{shipId}/sensors/{sensorId}', 'Modifica nome, posizione, soglie, attivo', '{\n  "soglia_max": 98\n}']]],
+      ['PATCH', '/ships/{shipId}/sensors/{sensorId}', 'Modifica nome, posizione, soglie, ritardo_allarme_s, isteresi, attivo', '{\n  "soglia_max": 98\n}'],
+      ['GET', '/ships/{shipId}/sensors/{sensorId}/alarm-preview', 'E se…? Allarmi che ci sarebbero stati nelle ultime 24 h con altre regole · query: soglia_min, soglia_max, ritardo_allarme_s, isteresi']]],
     ['Letture', [
       ['GET', '/ships/{shipId}/sensors/{sensorId}/readings/latest', 'Lettura più recente'],
       ['GET', '/ships/{shipId}/sensors/{sensorId}/readings', 'Letture grezze, paginate · query: since, until, page, limit'],
